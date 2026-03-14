@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            width: 380px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+        }
+        .container {
+            padding: 15px;
+        }
+        h2 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .primary-btn {
+            background: #4CAF50;
+            color: white;
+        }
+        .primary-btn:hover {
+            background: #45a049;
+        }
+        .primary-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .secondary-btn {
+            background: #2196F3;
+            color: white;
+        }
+        .secondary-btn:hover {
+            background: #0b7dda;
+        }
+        .secondary-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .danger-btn {
+            background: #f44336;
+            color: white;
+            font-size: 12px;
+        }
+        .danger-btn:hover {
+            background: #da190b;
+        }
+        .danger-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .settings {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .setting-item {
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .setting-item label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+        }
+        .setting-item input {
+            width: 100%;
+            padding: 6px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        #result {
+            background: white;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            min-height: 40px;
+            border-left: 4px solid #4CAF50;
+        }
+        .result-label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+        .result-text {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            word-break: break-all;
+        }
+        .status {
+            font-size: 12px;
+            padding: 8px;
+            border-radius: 3px;
+            margin-bottom: 10px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        .field-info {
+            background: #e8f5e9;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #2e7d32;
+        }
+        .field-info strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .field-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .field-selector button {
+            flex: 1;
+            padding: 8px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🤖驗證碼識別工具</h2>
+        
+   <div class="settings">
+            <label>
+                <input type="checkbox" id="auto-fill-checkbox" checked>
+                識別後自動填入輸入框
+            </label>
+            <!-- 這是新加的全自動按鈕 -->
+            <label style="color: #d93025; font-weight: bold; margin-top: 5px; display: block;">
+                <input type="checkbox" id="auto-run-checkbox">
+                開啟全自動模式 (F5刷新網頁自動執行)
+            </label>
+        </div>
+
+         <div id="status"></div>
+        <div id="field-info" class="field-info" style="display:none;">
+            <strong>已選擇輸入框:</strong>
+            <div id="field-name"></div>
+        </div>
+  <div class="buttons">
+    <!-- 手動選擇輸入框的按鈕 -->
+    <button id="select-btn">手動選擇輸入框</button>
+    
+    <!-- 清除選擇的按鈕 -->
+    <button id="clear-btn">清除選擇</button>
+    
+    <!-- 識別驗證碼的按鈕 -->
+    <button id="recognize-btn">識別驗證碼(F4重新讀取驗證碼帶入)</button>
+</div>
+
+        <div id="result" style="display:none;">
+            <div class="result-label">識別結果</div>
+            <div class="result-text" id="result-text"></div>
+        </div>
+    </div>
+<!-- 伺服器網址設定區塊 (這應該是你原本就有的) -->
+<div class="setting-item">
+    <label for="server-url">伺服器網址:</label>
+    <input type="text" id="server-url" placeholder="http://127.0.0.1:5000">
+</div>
+<!-- ========================================= -->
+<!-- 【新增】伺服器連線狀態顯示區塊 -->
+<!-- ========================================= -->
+<div class="setting-item" style="margin-top: 10px; font-size: 14px;">
+    <span>伺服器狀態: </span>
+    <span id="server-status" style="font-weight: bold; color: #f39c12;">🟡 檢查中...</span>
+</div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

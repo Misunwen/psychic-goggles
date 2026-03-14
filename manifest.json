@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "驗證碼自動識別填入",
+  "version": "1.0",
+  "description": "使用 ddddocr 自動識別和填入驗證碼",
+  "permissions":[
+    "storage", 
+    "activeTab",
+    "scripting",
+    "webRequest"
+  ],
+  "host_permissions":[
+    "<all_urls>",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "驗證碼識別"
+  },
+  "content_scripts":[
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
