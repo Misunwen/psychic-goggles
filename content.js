@@ -2,7 +2,6 @@
 // 1. 手動選擇輸入框的邏輯 (滑鼠移動會有紅框)
 // ==========================================
 function startSelectionMode() {
-    // 建立一個半透明的遮罩層
     const overlay = document.createElement('div');
     overlay.style.position = 'fixed';
     overlay.style.top = '0';
@@ -16,19 +15,15 @@ function startSelectionMode() {
 
     let lastElement = null;
 
-    // 滑鼠移動時，畫紅色邊框
     const mouseMoveHandler = (e) => {
-        // 先把遮罩層暫時隱藏，才抓得到底下的元素
         overlay.style.pointerEvents = 'none';
         const target = document.elementFromPoint(e.clientX, e.clientY);
         overlay.style.pointerEvents = 'auto';
 
         if (target && target !== lastElement) {
-            if (lastElement) {
-                lastElement.style.outline = ''; // 恢復上一個元素的邊框
-            }
+            if (lastElement) lastElement.style.outline = ''; 
             if (target.tagName.toLowerCase() === 'input') {
-                target.style.outline = '3px solid red'; // 是輸入框就畫紅框
+                target.style.outline = '3px solid red'; 
                 lastElement = target;
             } else {
                 lastElement = null;
@@ -36,28 +31,23 @@ function startSelectionMode() {
         }
     };
 
-    // 滑鼠點擊時，儲存選擇的輸入框
     const clickHandler = (e) => {
         e.preventDefault();
         e.stopPropagation();
 
         if (lastElement) {
-            lastElement.style.outline = ''; // 移除紅框
-            
-            // 產生這個元素的 CSS Selector，並存起來
+            lastElement.style.outline = ''; 
             const selector = generateSelector(lastElement);
             chrome.storage.local.set({ savedSelector: selector }, () => {
-                alert('已成功选择输入框！');
+                alert('✅ 已成功選擇輸入框！\n標識符：' + selector);
             });
         }
 
-        // 結束選擇模式，移除遮罩和監聽器
         document.body.removeChild(overlay);
         document.removeEventListener('mousemove', mouseMoveHandler);
         document.removeEventListener('click', clickHandler, true);
     };
 
-    // 產生 CSS 選擇器的小工具
     function generateSelector(element) {
         if (element.id) return '#' + element.id;
         if (element.name) return `input[name="${element.name}"]`;
@@ -72,29 +62,30 @@ function startSelectionMode() {
     document.addEventListener('click', clickHandler, true);
 }
 
-
 // ==========================================
-// 1. 全域變數：用來判斷現在是不是「選擇輸入框」模式
+// 全域變數
 // ==========================================
 let isSelecting = false;
 
 // ==========================================
-// 2. 接收從彈出視窗 (popup.js) 傳來的指令
+// 2. 接收從彈出視窗 (popup.js) 傳來的指令統一處理
 // ==========================================
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'startSelecting') {
-        // 啟動手動選擇輸入框的邏輯
         startSelectionMode();
         sendResponse({status: "ok"});
     } 
     else if (request.action === 'getCaptchaImage') {
-        // 手動獲取圖片的邏輯
         getCaptchaImage(sendResponse);
-        return true; // 保持非同步通道開啟
+        return true; 
     } 
     else if (request.action === 'fillCaptcha') {
-        // 手動填入驗證碼的邏輯
         fillCaptchaInput(request.text, request.selector);
+        sendResponse({status: "ok"});
+    }
+    else if (request.action === 'runAutoNow') {
+        // 來自面板的立刻執行指令，強制執行(傳入 true)
+        executeAutoRun(true);
         sendResponse({status: "ok"});
     }
 });
@@ -103,7 +94,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // 3. 抓取驗證碼圖片的核心邏輯
 // ==========================================
 function getCaptchaImage(callback) {
-    // 常見的驗證碼圖片特徵 (包含您新增的 #yw0 和 Base64 格式)
     const selectors =[
         '#yw0', '#vadimg', 'img[src^="data:image"]',
         'img[alt*="驗證碼"]', 'img[src*="VaildImage"]',
@@ -120,11 +110,10 @@ function getCaptchaImage(callback) {
     }
 
     if (!captchaImg) {
-        callback({error: '未找到验证码图像'});
+        callback({error: '未找到驗證碼圖像'});
         return;
     }
 
-    // 找到圖片後，轉換為白底 Base64
     convertImageToBase64(captchaImg, (imageData) => {
         if (imageData) {
             callback({imageData: imageData});
@@ -135,7 +124,6 @@ function getCaptchaImage(callback) {
 }
 
 function convertImageToBase64(captchaImg, callback) {
-    // 判斷網頁是否刷新了圖片，如果刷新了就更新記錄
     if (captchaImg.src !== captchaImg.dataset.lastGeneratedSrc) {
         captchaImg.dataset.originalSrc = captchaImg.src;
     }
@@ -144,11 +132,7 @@ function convertImageToBase64(captchaImg, callback) {
     const isBase64 = imgSrc.startsWith('data:image');
 
     const img = new Image();
-    
-    // 如果不是 Base64 才處理跨域
-    if (!isBase64) {
-        img.crossOrigin = 'anonymous'; 
-    }
+    if (!isBase64) img.crossOrigin = 'anonymous'; 
     
     img.onload = () => {
         const canvas = document.createElement('canvas');
@@ -156,25 +140,19 @@ function convertImageToBase64(captchaImg, callback) {
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
         
-        // 填上白色背景，防止透明背景變黑
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0);
         
         const base64Data = canvas.toDataURL('image/png');
-        
-        // 替換網頁上的圖片並記錄，防止重複點擊出錯
         captchaImg.src = base64Data;
         captchaImg.dataset.lastGeneratedSrc = base64Data;
         
         callback(base64Data);
     };
     
-    img.onerror = () => {
-        callback(null);
-    };
+    img.onerror = () => callback(null);
     
-    // 如果是實體網址就加上時間戳防快取，如果是 Base64 就直接讀取
     if (isBase64) {
         img.src = imgSrc; 
     } else {
@@ -184,17 +162,26 @@ function convertImageToBase64(captchaImg, callback) {
 }
 
 // ==========================================
-// 4. 自動填入驗證碼的邏輯
+// ★ 模擬真人打字功能 (防偵測核心)
 // ==========================================
-function fillCaptchaInput(text, selector) {
-    let inputField = null;
-    
-    // 優先使用我們手動選擇儲存的輸入框
-    if (selector) {
-        inputField = document.querySelector(selector);
+async function simulateTyping(inputElement, text) {
+    inputElement.value = '';
+    for (let i = 0; i < text.length; i++) {
+        inputElement.value += text[i];
+        inputElement.dispatchEvent(new Event('input', { bubbles: true })); 
+        inputElement.dispatchEvent(new Event('change', { bubbles: true })); 
+        // 每個字中間隨機停頓 100 毫秒 ~ 300 毫秒
+        await new Promise(r => setTimeout(r, Math.random() * 200 + 100));
     }
+}
+
+// ==========================================
+// 4. 自動填入驗證碼的邏輯 (使用模擬打字)
+// ==========================================
+async function fillCaptchaInput(text, selector) {
+    let inputField = null;
+    if (selector) inputField = document.querySelector(selector);
     
-    // 如果沒選過，就用猜的（找網頁中常見的驗證碼輸入框）
     if (!inputField) {
         const defaultSelectors = [
             'input[name*="captcha" i]', 'input[name*="verify" i]',
@@ -207,19 +194,14 @@ function fillCaptchaInput(text, selector) {
         }
     }
 
-    // 填入文字並觸發事件，讓網頁 (如 Vue/React) 知道我們填了字
     if (inputField) {
-        inputField.value = text;
-        inputField.dispatchEvent(new Event('input', { bubbles: true }));
-        inputField.dispatchEvent(new Event('change', { bubbles: true }));
+        await simulateTyping(inputField, text);
     }
 }
 
 // ==========================================
-// 5. 手動選擇輸入框的滑鼠特效與點擊邏輯
+// 5. 手動選擇輸入框的滑鼠特效與點擊邏輯 (第二種選擇模式)
 // ==========================================
-
-// 滑鼠移過去：加上紅框與紅底
 document.addEventListener('mouseover', (e) => {
     if (!isSelecting) return;
     e.stopPropagation();
@@ -227,7 +209,6 @@ document.addEventListener('mouseover', (e) => {
     e.target.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
 });
 
-// 滑鼠移走：取消紅框與紅底
 document.addEventListener('mouseout', (e) => {
     if (!isSelecting) return;
     e.stopPropagation();
@@ -235,91 +216,91 @@ document.addEventListener('mouseout', (e) => {
     e.target.style.backgroundColor = '';
 });
 
-// 滑鼠點擊：確認選擇這個輸入框
 document.addEventListener('click', (e) => {
     if (!isSelecting) return;
-    e.preventDefault();  // 阻止網頁原本的點擊反應
+    e.preventDefault();  
     e.stopPropagation();
 
     const target = e.target;
-    // 清除特效，恢復正常狀態
     target.style.outline = '';
     target.style.backgroundColor = '';
     isSelecting = false;
     document.body.style.cursor = 'default';
 
-    // 產生這個輸入框的唯一識別碼 (Selector)
     let selector = '';
-    if (target.id) {
-        selector = '#' + target.id;
-    } else if (target.name) {
-        selector = `input[name="${target.name}"]`;
-    } else if (target.className && typeof target.className === 'string') {
+    if (target.id) selector = '#' + target.id;
+    else if (target.name) selector = `input[name="${target.name}"]`;
+    else if (target.className && typeof target.className === 'string') {
         selector = target.tagName.toLowerCase() + '.' + target.className.trim().split(/\s+/).join('.');
-    } else {
-        selector = target.tagName.toLowerCase();
-    }
+    } else selector = target.tagName.toLowerCase();
 
-    // 存入 Chrome 記憶體，並通知使用者
     chrome.storage.local.set({savedSelector: selector}, () => {
-        alert('✅ 已成功选择输入框！\n标识符：' + selector + '\n\n现在您可以再次打开扩充功能进行识别了。');
+        alert('✅ 已成功選擇輸入框！\n標識符：' + selector);
     });
-}, true); // true 代表在「捕獲階段」攔截點擊，確保最高優先級
+}, true); 
+
 
 // ==========================================
-// 全自動核心執行函數
+// ★ 全自動核心執行函數 (加入 forceRun 參數)
 // ==========================================
-function executeAutoRun() {
+// forceRun 如果是 true，代表無視「全自動」有沒有打勾，強制執行
+function executeAutoRun(forceRun = false) {
     chrome.storage.local.get(['autoRun', 'serverUrl', 'savedSelector'], (data) => {
-        if (!data.autoRun) return; // 如果沒打勾全自動，就不執行
+        // 如果沒打勾全自動，且「不是」強制執行(例如按下F4)，就不執行
+        if (!data.autoRun && !forceRun) return; 
 
         const apiUrl = (data.serverUrl || 'http://127.0.0.1:5000').replace(/\/+$/, '') + '/recognize';
         
         getCaptchaImage((response) => {
             if (response && response.imageData) {
-                console.log('【验证码小助手】全自动模式启动，正在识别...');
+                console.log('【驗證碼小助手】啟動識別任務，正在與伺服器連線...');
                 fetch(apiUrl, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ image: response.imageData })
                 })
                 .then(res => res.json())
-                .then(resData => {
+                .then(async resData => {
                     const text = resData.text || resData.result;
                     if (text) {
-                        fillCaptchaInput(text, data.savedSelector);
-                        console.log('【验证码小助手】全自动识别完成：', text);
+                        // 加入 await 等待模擬打字完成
+                        await fillCaptchaInput(text, data.savedSelector);
+                        console.log('【驗證碼小助手】識別與輸入完成：', text);
                     }
                 })
-                .catch(err => console.error('【验证码小助手】识别失败：', err));
+                .catch(err => console.error('【驗證碼小助手】識別失敗：', err));
             }
         });
     });
 }
 
+// ==========================================
+// 觸發時機設定
+// ==========================================
+
 // 觸發時機 1：網頁剛載入完畢時 (F5)
 window.addEventListener('load', () => {
-    setTimeout(executeAutoRun, 1000); 
+    // 稍微隨機延遲一下再啟動，更像人類
+    setTimeout(() => executeAutoRun(false), Math.random() * 500 + 800); 
 });
 
-// 觸發時機 2：接收來自 popup.js 的「立刻執行」指令 (打勾瞬間)
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // ... 這裡保留你原本其他的監聽器 (startSelecting, getCaptchaImage 等) ...
-    
-    if (request.action === 'runAutoNow') {
-        executeAutoRun();
-        sendResponse({status: "ok"});
-    }
-});
-
-// 觸發時機 3：當使用者點擊網頁上的圖片 (通常是為了換一張驗證碼) 時，延遲 1 秒自動重跑
+// 觸發時機 2：當使用者點擊網頁上的圖片時，延遲 1 秒自動重跑
 document.addEventListener('click', (e) => {
     if (e.target.tagName.toLowerCase() === 'img') {
         chrome.storage.local.get(['autoRun'], (data) => {
             if (data.autoRun) {
-                console.log('【验证码小助手】侦测到点击图片，可能在更换验证码，1秒后自动重新识别...');
-                setTimeout(executeAutoRun, 1000); // 等待新圖片載入後再辨識
+                console.log('【驗證碼小助手】偵測到點擊圖片，1秒後自動重新識別...');
+                setTimeout(() => executeAutoRun(false), 1000); 
             }
         });
+    }
+});
+
+// ★ 新增觸發時機 3：按下 F4 快捷鍵強制重新識別
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'F4') {
+        e.preventDefault(); // 防止瀏覽器預設行為 (Chrome 按 F4 預設會跳到網址列)
+        console.log('【驗證碼小助手】按下 F4 快捷鍵，強制重新抓取與識別！');
+        executeAutoRun(true); // 傳入 true，強制幫你辨識並打字
     }
 });
