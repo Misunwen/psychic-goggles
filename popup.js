@@ -5,13 +5,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const serverStatusSpan = document.getElementById('server-status');
     const recognizeBtn = document.getElementById('recognize-btn');
     const selectBtn = document.getElementById('select-btn');
-    const clearBtn = document.getElementById('clear-btn'); // 確保你的 HTML 裡有這個 id
+    const clearBtn = document.getElementById('clear-btn'); 
     const autoFillCheckbox = document.getElementById('auto-fill-checkbox');
     const autoRunCheckbox = document.getElementById('auto-run-checkbox');
     const serverUrlInput = document.getElementById('server-url');
     const fieldInfo = document.getElementById('field-info');
     const fieldName = document.getElementById('field-name');
     const resultDiv = document.getElementById('result');
+    
+    // ★ 新增：取得輸入模式下拉選單
+    const typingModeSelect = document.getElementById('typingMode'); 
 
     // =========================================
     // 2. 建立檢查伺服器狀態的函數 (加入超時機制)
@@ -52,7 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================
     // 3. 讀取儲存的設定，並執行第一次伺服器檢查
     // =========================================
-    chrome.storage.local.get(['savedSelector', 'autoFill', 'autoRun', 'serverUrl'], (data) => {
+    // ★ 修改：在 get 陣列中加入 'typingMode'
+    chrome.storage.local.get(['savedSelector', 'autoFill', 'autoRun', 'serverUrl', 'typingMode'], (data) => {
         if (data.savedSelector) {
             fieldInfo.style.display = 'block';
             fieldName.textContent = data.savedSelector;
@@ -64,6 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (serverUrlInput) {
             serverUrlInput.value = currentUrl;
         }
+
+        // ★ 新增：讀取並設定輸入模式選單
+        if (data.typingMode && typingModeSelect) {
+            typingModeSelect.value = data.typingMode;
+        }
         
         // 打開視窗時立刻檢查一次伺服器狀態
         checkServerStatus(currentUrl);
@@ -73,6 +82,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // 4. 綁定事件監聽器
     // =========================================
     
+    // ★ 新增：監聽輸入模式下拉選單改變時，儲存設定
+    if (typingModeSelect) {
+        typingModeSelect.addEventListener('change', (e) => {
+            chrome.storage.local.set({ typingMode: e.target.value });
+        });
+    }
+
     // 儲存設定 (自動填入)
     if (autoFillCheckbox) {
         autoFillCheckbox.addEventListener('change', (e) => chrome.storage.local.set({ autoFill: e.target.checked }));
@@ -169,11 +185,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             resultDiv.textContent = '識別成功: ' + text;
 
                             if (autoFillCheckbox && autoFillCheckbox.checked) {
-                                chrome.storage.local.get(['savedSelector'], (storageData) => {
+                                // ★ 修改：手動點擊識別時，一併讀取並傳送 typingMode 給網頁
+                                chrome.storage.local.get(['savedSelector', 'typingMode'], (storageData) => {
                                     chrome.tabs.sendMessage(tabs[0].id, {
                                         action: 'fillCaptcha',
                                         text: text,
-                                        selector: storageData.savedSelector
+                                        selector: storageData.savedSelector,
+                                        typingMode: storageData.typingMode || 'simulate' // 傳送輸入模式
                                     });
                                 });
                             }

@@ -80,7 +80,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true; 
     } 
     else if (request.action === 'fillCaptcha') {
-        fillCaptchaInput(request.text, request.selector);
+        // ★ 接收 popup 傳來的 typingMode (輸入模式)
+        fillCaptchaInput(request.text, request.selector, request.typingMode);
         sendResponse({status: "ok"});
     }
     else if (request.action === 'runAutoNow') {
@@ -162,7 +163,7 @@ function convertImageToBase64(captchaImg, callback) {
 }
 
 // ==========================================
-// ★ 模擬真人打字功能 (防偵測核心)
+// ★ 模式 1：模擬真人逐字打字 (防偵測核心)
 // ==========================================
 async function simulateTyping(inputElement, text) {
     inputElement.value = '';
@@ -176,9 +177,23 @@ async function simulateTyping(inputElement, text) {
 }
 
 // ==========================================
-// 4. 自動填入驗證碼的邏輯 (使用模擬打字)
+// ★ 模式 2：瞬間帶入 (破解 Vue/React 防禦)
 // ==========================================
-async function fillCaptchaInput(text, selector) {
+function instantInput(inputElement, text) {
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    if (nativeInputValueSetter) {
+        nativeInputValueSetter.call(inputElement, text);
+    } else {
+        inputElement.value = text;
+    }
+    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+    inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+// ==========================================
+// 4. 自動填入驗證碼的邏輯 (加入模式選擇)
+// ==========================================
+async function fillCaptchaInput(text, selector, typingMode = 'simulate') {
     let inputField = null;
     if (selector) inputField = document.querySelector(selector);
     
@@ -195,8 +210,33 @@ async function fillCaptchaInput(text, selector) {
     }
 
     if (inputField) {
-        await simulateTyping(inputField, text);
+        if (typingMode === 'simulate') {
+            console.log('【Captcha-Sniper】使用：逐字模擬打字');
+            await simulateTyping(inputField, text);
+        } else {
+            console.log('【Captcha-Sniper】使用：瞬間直接帶入');
+            instantInput(inputField, text);
+        }
     }
+}
+
+// ==========================================
+// ★ 神級外掛：直接從語音按鈕網址偷取驗證碼答案
+// ==========================================
+function checkAudioCaptchaBypass() {
+    const audioBtn = document.querySelector('#playcaptcha, a[href*="translate_tts"]');
+    if (audioBtn && audioBtn.href) {
+        try {
+            const url = new URL(audioBtn.href);
+            let qParam = url.searchParams.get('q'); 
+            if (qParam) {
+                return qParam.replace(/["']/g, ''); // 拔掉引號回傳純文字
+            }
+        } catch(e) {
+            console.error("【Captcha-Sniper】解析語音驗證碼網址失敗", e);
+        }
+    }
+    return null; 
 }
 
 // ==========================================
@@ -241,19 +281,36 @@ document.addEventListener('click', (e) => {
 
 
 // ==========================================
-// ★ 全自動核心執行函數 (加入 forceRun 參數)
+// ★ 全自動核心執行函數 (加入 forceRun 與 模式選擇)
 // ==========================================
 // forceRun 如果是 true，代表無視「全自動」有沒有打勾，強制執行
 function executeAutoRun(forceRun = false) {
-    chrome.storage.local.get(['autoRun', 'serverUrl', 'savedSelector'], (data) => {
+    // 加入讀取 typingMode
+    chrome.storage.local.get(['autoRun', 'serverUrl', 'savedSelector', 'typingMode'], async (data) => {
         // 如果沒打勾全自動，且「不是」強制執行(例如按下F4)，就不執行
         if (!data.autoRun && !forceRun) return; 
 
+        // 預設為逐字模擬，如果有設定就用設定的
+        const typingMode = data.typingMode || 'simulate';
+
+        // ----------------------------------------------------
+        // 🚀 第一階段：先檢查有沒有「語音按鈕漏洞」，有就直接秒殺！
+        // ----------------------------------------------------
+        const bypassAnswer = checkAudioCaptchaBypass();
+        if (bypassAnswer) {
+            console.log('【Captcha-Sniper】😎 發現語音驗證碼漏洞！直接攔截答案：', bypassAnswer);
+            await fillCaptchaInput(bypassAnswer, data.savedSelector, typingMode);
+            return; // 結束執行，不再往下跑圖片辨識
+        }
+
+        // ----------------------------------------------------
+        // 🐢 第二階段：乖乖抓圖片給 Python 辨識
+        // ----------------------------------------------------
         const apiUrl = (data.serverUrl || 'http://127.0.0.1:5000').replace(/\/+$/, '') + '/recognize';
         
         getCaptchaImage((response) => {
             if (response && response.imageData) {
-                console.log('【驗證碼小助手】啟動識別任務，正在與伺服器連線...');
+                console.log('【Captcha-Sniper】啟動圖片識別任務，正在與伺服器連線...');
                 fetch(apiUrl, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -263,12 +320,12 @@ function executeAutoRun(forceRun = false) {
                 .then(async resData => {
                     const text = resData.text || resData.result;
                     if (text) {
-                        // 加入 await 等待模擬打字完成
-                        await fillCaptchaInput(text, data.savedSelector);
-                        console.log('【驗證碼小助手】識別與輸入完成：', text);
+                        // 加入 await 等待輸入完成，並傳入 typingMode
+                        await fillCaptchaInput(text, data.savedSelector, typingMode);
+                        console.log('【Captcha-Sniper】識別與輸入完成：', text);
                     }
                 })
-                .catch(err => console.error('【驗證碼小助手】識別失敗：', err));
+                .catch(err => console.error('【Captcha-Sniper】識別失敗：', err));
             }
         });
     });
@@ -289,18 +346,18 @@ document.addEventListener('click', (e) => {
     if (e.target.tagName.toLowerCase() === 'img') {
         chrome.storage.local.get(['autoRun'], (data) => {
             if (data.autoRun) {
-                console.log('【驗證碼小助手】偵測到點擊圖片，1秒後自動重新識別...');
+                console.log('【Captcha-Sniper】偵測到點擊圖片，1秒後自動重新識別...');
                 setTimeout(() => executeAutoRun(false), 1000); 
             }
         });
     }
 });
 
-// ★ 新增觸發時機 3：按下 F4 快捷鍵強制重新識別
+// ★ 觸發時機 3：按下 F4 快捷鍵強制重新識別
 document.addEventListener('keydown', (e) => {
     if (e.key === 'F4') {
         e.preventDefault(); // 防止瀏覽器預設行為 (Chrome 按 F4 預設會跳到網址列)
-        console.log('【驗證碼小助手】按下 F4 快捷鍵，強制重新抓取與識別！');
+        console.log('【Captcha-Sniper】按下 F4 快捷鍵，強制重新抓取與識別！');
         executeAutoRun(true); // 傳入 true，強制幫你辨識並打字
     }
 });

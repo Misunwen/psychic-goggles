@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "驗證碼自動識別填入",
-  "version": "1.0",
+  "version": "3.0",
   "description": "使用 ddddocr 自動識別和填入驗證碼",
   "permissions":[
     "storage", 
