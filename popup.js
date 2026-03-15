@@ -12,9 +12,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const fieldInfo = document.getElementById('field-info');
     const fieldName = document.getElementById('field-name');
     const resultDiv = document.getElementById('result');
-    
-    // ★ 新增：取得輸入模式下拉選單
     const typingModeSelect = document.getElementById('typingMode'); 
+    
+    // ★ 新增：取得驗證碼長度輸入框
+    const captchaLengthInput = document.getElementById('captcha-length');
 
     // =========================================
     // 2. 建立檢查伺服器狀態的函數 (加入超時機制)
@@ -55,8 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================
     // 3. 讀取儲存的設定，並執行第一次伺服器檢查
     // =========================================
-    // ★ 修改：在 get 陣列中加入 'typingMode'
-    chrome.storage.local.get(['savedSelector', 'autoFill', 'autoRun', 'serverUrl', 'typingMode'], (data) => {
+    // ★ 修改：在 get 陣列中加入 'captchaLength'
+    chrome.storage.local.get(['savedSelector', 'autoFill', 'autoRun', 'serverUrl', 'typingMode', 'captchaLength'], (data) => {
         if (data.savedSelector) {
             fieldInfo.style.display = 'block';
             fieldName.textContent = data.savedSelector;
@@ -69,9 +70,13 @@ document.addEventListener('DOMContentLoaded', () => {
             serverUrlInput.value = currentUrl;
         }
 
-        // ★ 新增：讀取並設定輸入模式選單
         if (data.typingMode && typingModeSelect) {
             typingModeSelect.value = data.typingMode;
+        }
+
+        // ★ 新增：讀取儲存的驗證碼長度
+        if (data.captchaLength && captchaLengthInput) {
+            captchaLengthInput.value = data.captchaLength;
         }
         
         // 打開視窗時立刻檢查一次伺服器狀態
@@ -82,25 +87,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // 4. 綁定事件監聽器
     // =========================================
     
-    // ★ 新增：監聽輸入模式下拉選單改變時，儲存設定
-    if (typingModeSelect) {
-        typingModeSelect.addEventListener('change', (e) => {
-            chrome.storage.local.set({ typingMode: e.target.value });
+    // ★ 新增：當長度輸入框改變時，自動儲存設定
+    if (captchaLengthInput) {
+        captchaLengthInput.addEventListener('change', (e) => {
+            chrome.storage.local.set({ captchaLength: e.target.value });
         });
     }
 
-    // 儲存設定 (自動填入)
+    if (typingModeSelect) {
+        typingModeSelect.addEventListener('change', (e) => chrome.storage.local.set({ typingMode: e.target.value }));
+    }
+
     if (autoFillCheckbox) {
         autoFillCheckbox.addEventListener('change', (e) => chrome.storage.local.set({ autoFill: e.target.checked }));
     }
 
-    // 當「全自動模式」打勾改變時
     if (autoRunCheckbox) {
         autoRunCheckbox.addEventListener('change', (e) => {
             const isChecked = e.target.checked;
             chrome.storage.local.set({ autoRun: isChecked });
             
-            // 如果使用者打勾了，立刻發送指令給網頁，要求「現在馬上執行一次全自動」，不需要等 F5
             if (isChecked) {
                 chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
                     if (tabs[0]) {
@@ -111,7 +117,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 網址輸入框改變時：儲存網址並重新檢查伺服器連線 (防手震)
     let typingTimer;
     if(serverUrlInput) {
         serverUrlInput.addEventListener('input', (e) => {
@@ -121,11 +126,10 @@ document.addEventListener('DOMContentLoaded', () => {
             clearTimeout(typingTimer);
             typingTimer = setTimeout(() => {
                 checkServerStatus(newUrl);
-            }, 800); // 停下鍵盤 0.8 秒後才檢查
+            }, 800); 
         });
     }
 
-    // 清除選擇按鈕
     if(clearBtn) {
         clearBtn.addEventListener('click', () => {
             chrome.storage.local.remove('savedSelector', () => {
@@ -138,7 +142,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 手動選擇輸入框
     if(selectBtn) {
         selectBtn.addEventListener('click', () => {
             chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
@@ -160,6 +163,9 @@ document.addEventListener('DOMContentLoaded', () => {
             resultDiv.className = 'result loading';
             resultDiv.textContent = '正在取得驗證碼...';
 
+            // ★ 新增：取得當前輸入框設定的長度數字
+            let expectedLength = captchaLengthInput ? parseInt(captchaLengthInput.value) : null;
+
             chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
                 chrome.tabs.sendMessage(tabs[0].id, {action: 'getCaptchaImage'}, (response) => {
                     if (chrome.runtime.lastError || !response || response.error) {
@@ -175,7 +181,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     fetch(apiUrl, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ image: response.imageData })
+                        // ★ 修改：把 length 一併傳送給後端
+                        body: JSON.stringify({ 
+                            image: response.imageData,
+                            length: expectedLength
+                        })
                     })
                     .then(res => res.json())
                     .then(data => {
@@ -185,13 +195,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             resultDiv.textContent = '識別成功: ' + text;
 
                             if (autoFillCheckbox && autoFillCheckbox.checked) {
-                                // ★ 修改：手動點擊識別時，一併讀取並傳送 typingMode 給網頁
                                 chrome.storage.local.get(['savedSelector', 'typingMode'], (storageData) => {
                                     chrome.tabs.sendMessage(tabs[0].id, {
                                         action: 'fillCaptcha',
                                         text: text,
                                         selector: storageData.savedSelector,
-                                        typingMode: storageData.typingMode || 'simulate' // 傳送輸入模式
+                                        typingMode: storageData.typingMode || 'simulate' 
                                     });
                                 });
                             }
