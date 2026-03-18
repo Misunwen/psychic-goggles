@@ -408,16 +408,25 @@ if (document.readyState === 'loading') {
 document.addEventListener('click', (e) => {
     // e.isTrusted 為 true 代表是真人滑鼠點擊；false 代表是程式 (click()) 觸發的
     if (!e.isTrusted) return; 
-    if (e.target.tagName.toLowerCase() === 'img') {
+    // 放寬判定：點擊的元素本身是圖片，或者它被包在圖片/超連結裡面
+    const target = e.target;
+    const isImg = target.tagName.toLowerCase() === 'img' || target.closest('img');
+    if (isImg) {
         chrome.storage.local.get(['autoRun'], (data) => {
             if (data.autoRun) {
-                console.log('【Captcha-Sniper】偵測到手動點擊圖片，1.5秒後重新識別...');
-                retryCount = 0; // 手動點擊就重新計算
-                setTimeout(() => executeAutoRun(false), 1500); 
+                console.log('【Captcha-Sniper】🖱️ 偵測到手動點擊圖片，等待新圖片載入後重新識別...');
+                
+                // ★ 核心修復 1：強制解除防護鎖！(避免上一次辨識卡住，導致這次不跑)
+                isExecuting = false; 
+                retryCount = 0; 
+                
+                // ★ 核心修復 2：傳入 true 強制觸發，延遲 1.8 秒確保網頁 AJAX 完全把新圖片載入
+                setTimeout(() => executeAutoRun(true), 1800); 
             }
         });
     }
-});
+}, true); // ★ 核心修復 3：加上 true (Capture Phase 捕獲階段)，無視網頁前端框架的 stopPropagation 阻擋！
+
 // 3. 快捷鍵強制觸發
 document.addEventListener('keydown', (e) => {
     if (e.key === 'F4') {
